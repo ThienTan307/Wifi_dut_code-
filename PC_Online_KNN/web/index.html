@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DUT WiFi Positioning - Map Khu I</title>
+    
+    <!-- Fonts: Inter for UI, Roboto Mono for data -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- CSS -->
+    <link rel="stylesheet" href="style.css">
+
+    <!-- Paho MQTT Library (CDN) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.1.0/paho-mqtt.min.js"></script>
+</head>
+<body>
+
+    <!-- 1. Background Elements -->
+    <div class="bg-gradient"></div>
+    <div class="bg-grid"></div>
+
+    <!-- 2. Header & Status -->
+    <header class="app-header glass-panel">
+        <div class="header-left">
+            <div class="logo-circle"></div>
+            <div>
+                <h1>Indoor Positioning</h1>
+                <p class="subtitle">Trường Đại Học Bách Khoa - ĐHĐN</p>
+            </div>
+        </div>
+        
+        <div class="header-right">
+            <div class="search-box">
+                <input type="text" id="search-input" placeholder="Tìm kiếm phòng (VD: I303)..." autocomplete="off">
+                <button id="search-btn">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                </button>
+            </div>
+            <div id="search-result" class="search-result-dropdown"></div>
+
+            <div class="mqtt-status-container" id="mqtt-status">
+                <div class="status-dot disconnected" id="mqtt-status-dot"></div>
+                <span class="status-text" id="mqtt-status-text">Đang kết nối MQTT...</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- 3. Main Content Layout -->
+    <main class="app-layout">
+        
+        <!-- Left Sidebar: HUD Info -->
+        <aside class="sidebar-left">
+            <!-- Room Prediction Card -->
+            <div class="info-card glass-panel highlight-border">
+                <h2 class="card-title">Vị Trí Hiện Tại (Room)</h2>
+                
+                <div class="hud-main-value">
+                    <span id="hud-room" class="no-data">Đang chờ...</span>
+                </div>
+                
+                <div class="hud-details">
+                    <div class="detail-item">
+                        <span class="detail-label">Độ tin cậy</span>
+                        <div class="confidence-container">
+                            <span id="hud-confidence" class="detail-value">—</span>
+                            <div class="confidence-track">
+                                <div id="hud-confidence-bar" class="confidence-bar"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Tầng dự đoán</span>
+                        <span id="hud-floor" class="detail-value">—</span>
+                    </div>
+                </div>
+                <div id="last-update" class="last-update">Chưa có dữ liệu</div>
+            </div>
+
+            <!-- Coordinate Info Card -->
+            <div class="info-card glass-panel">
+                <h2 class="card-title">Tọa Độ (Coordinate)</h2>
+                
+                <div class="hud-main-value small">
+                    <span id="hud-position" class="position-badge unavailable">Chưa có tọa độ</span>
+                </div>
+                
+                <div class="hud-details coordinate-grid">
+                    <div class="coord-box">
+                        <span class="coord-label">X (Meters)</span>
+                        <span id="hud-x" class="coord-value">—</span>
+                    </div>
+                    <div class="coord-box">
+                        <span class="coord-label">Y (Meters)</span>
+                        <span id="hud-y" class="coord-value">—</span>
+                    </div>
+                </div>
+                <p class="helper-text">*Yêu cầu thu dataset có X/Y để nội suy</p>
+            </div>
+        </aside>
+
+        <!-- Center: Map Viewer -->
+        <section class="map-section glass-panel">
+            
+            <!-- Floor Selector Controls -->
+            <div class="map-controls">
+                <button class="floor-btn active" data-floor="3">Tầng 3</button>
+                <button class="floor-btn" data-floor="2">Tầng 2</button>
+                <button class="floor-btn" data-floor="1">Tầng 1</button>
+            </div>
+
+            <!-- Map Viewport -->
+            <div class="map-viewport">
+                <!-- 1. SVG Layer -->
+                <div id="map-svg-container" class="map-layer"></div>
+                
+                <!-- 2. Overlay Layer (Phòng highlight) -->
+                <div id="map-overlays" class="map-layer pointer-events-none"></div>
+                
+                <!-- 3. Marker Layer -->
+                <div id="position-marker" class="marker" style="display: none;">
+                    <div class="marker-core"></div>
+                    <div class="marker-pulse"></div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- 4. Room Info Panel (Side Modal) -->
+    <div id="room-panel" class="room-panel glass-panel">
+        <div class="panel-header">
+            <h3 id="room-panel-name">Tên Phòng</h3>
+            <button id="room-panel-close" class="close-btn">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+        </div>
+        <div class="panel-content">
+            <div class="panel-row">
+                <span class="label">Tầng:</span>
+                <span id="room-panel-floor" class="value"></span>
+            </div>
+            <div class="panel-row">
+                <span class="label">Loại:</span>
+                <span id="room-panel-type" class="value"></span>
+            </div>
+            <div class="panel-row">
+                <span class="label">Sức chứa:</span>
+                <span id="room-panel-capacity" class="value"></span>
+            </div>
+            <div class="panel-desc">
+                <p id="room-panel-desc"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main JS Application -->
+    <script type="module" src="app.js"></script>
+</body>
+</html>
