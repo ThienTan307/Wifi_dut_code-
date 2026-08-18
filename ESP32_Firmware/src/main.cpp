@@ -7,9 +7,9 @@
 #include <algorithm>
 #include <cmath>
 
-const char* WIFI_SSID       = "Highlands Coffee";
-const char* WIFI_PASS       = "";
-const char* MQTT_SERVER     = "172.15.144.142";  
+const char* WIFI_SSID       = "Tan";
+const char* WIFI_PASS       = "12345678";
+const char* MQTT_SERVER     = "172.20.10.5";  
 const int   MQTT_PORT       = 1883;
 const char* MQTT_CLIENT_ID  = "ESP32-S3-GW";
 const char* MQTT_TOPIC      = "wifi/scan";
